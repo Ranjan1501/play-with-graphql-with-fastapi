@@ -1,0 +1,17 @@
+[project]
+name = "play-with-graphql"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.15"
+dependencies = [
+    "strawberry-graphql[fastapi]>=0.339.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+play-with-graphql = "play_with_graphql:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
