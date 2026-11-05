@@ -1,3 +1,4 @@
+
 import logging
 
 import psycopg
@@ -9,28 +10,58 @@ from play_with_graphql.services import memory_data
 logger = logging.getLogger(__name__)
 
 
-def get_all_users() -> list[User]:
+def get_users_page(
+    first: int,
+    after: int | None = None,
+) -> tuple[list[User], bool]:
 
     try:
-        # Fetch all users using one database query.
+        # Fetch one extra record to determine whether another page exists.
+        cursor_id = after if after is not None else 0
+
         rows = execute_query(
-            "SELECT id, name, email FROM users ORDER BY id"
+            """
+            SELECT id, name, email
+            FROM users
+            WHERE id > %s
+            ORDER BY id
+            LIMIT %s
+            """,
+            (cursor_id, first + 1),
         )
 
-        return [
-            User(id=row[0], name=row[1], email=row[2])
+        has_more = len(rows) > first
+
+        # Remove the extra record used to detect the next page.
+        rows = rows[:first]
+
+        users = [
+            User(
+                id=row[0],
+                name=row[1],
+                email=row[2],
+            )
             for row in rows
         ]
 
-    except psycopg.Error as error:
-        logger.warning("Could not fetch users from PostgreSQL: %s", error)
+        return users, has_more
 
-        # Fallback to in-memory data.
+    except psycopg.Error as error:
+        logger.warning("Using in-memory user pagination: %s", error)
+
+        # Apply the same cursor and limit to the fallback list.
+        filtered_users = [
+            user for user in memory_data.users
+            if user["id"] > (after or 0)
+        ]
+
+        has_more = len(filtered_users) > first
+
         return [
             User(
                 id=user["id"],
                 name=user["name"],
-                email=user["email"]
+                email=user["email"],
             )
-            for user in memory_data.users
-        ]
+            for user in filtered_users[:first]
+        ], has_more

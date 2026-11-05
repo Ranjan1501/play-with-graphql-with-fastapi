@@ -1,7 +1,10 @@
+
 import strawberry
 
-from play_with_graphql.models.order import Order
-from play_with_graphql.services.order_service import get_orders_by_user_id
+from play_with_graphql.models.order import OrderPage
+from play_with_graphql.services.order_service import (
+    get_orders_page_by_user_id,
+)
 
 
 @strawberry.type
@@ -10,16 +13,25 @@ class User:
     name: str
     email: str
 
-    # Holds orders fetched by the optimized batch query.
-    # Private means it won't be exposed in the GraphQL schema.
-    _loaded_orders: strawberry.Private[list[Order] | None] = None
-
     @strawberry.field
-    def orders(self) -> list[Order]:
+    def orders(
+        self,
+        first: int = 10,
+        after: int | None = None,
+    ) -> OrderPage:
 
-        # If orders were already fetched in bulk, return them.
-        if self._loaded_orders is not None:
-            return self._loaded_orders
+        # Restrict page size to avoid unnecessarily large responses.
+        first = max(1, min(first, 100))
 
-        # Otherwise, use the original N+1 implementation.
-        return get_orders_by_user_id(self.id)
+        # Fetch only this user's requested order page.
+        return get_orders_page_by_user_id(
+            user_id=self.id,
+            first=first,
+            after=after,
+        )
+
+@strawberry.type
+class UserPage:
+    items: list[User]
+    next_cursor: int | None
+    has_more: bool

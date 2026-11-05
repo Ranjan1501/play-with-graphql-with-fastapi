@@ -1,93 +1,82 @@
-
 import logging
-
 import psycopg
 
 from play_with_graphql.database.db import execute_query
-from play_with_graphql.models.order import Order
+from play_with_graphql.models.order import Order, OrderPage
 from play_with_graphql.services import memory_data
 
-logger = logging.getLogger(__name__)
+def get_orders_page_by_user_id(
+    user_id: int,
+    first: int,
+    after: int | None = None,
+) -> OrderPage:
 
-
-# Original implementation: one query per user.
-def get_orders_by_user_id(user_id: int) -> list[Order]:
+    cursor_id = after if after is not None else 0
 
     try:
+        # Fetch one extra order to check whether another page exists.
         rows = execute_query(
             """
             SELECT id, amount
             FROM orders
             WHERE user_id = %s
+              AND id > %s
             ORDER BY id
+            LIMIT %s
             """,
-            (user_id,),
+            (user_id, cursor_id, first + 1),
         )
 
-        return [
-            Order(id=row[0], amount=float(row[1]))
+        has_more = len(rows) > first
+
+        rows = rows[:first]
+
+        orders = [
+            Order(
+                id=row[0],
+                amount=float(row[1]),
+            )
             for row in rows
         ]
 
-    except psycopg.Error as error:
-        logger.warning("Using memory fallback: %s", error)
+        # The next cursor is the ID of the last returned order.
+        next_cursor = orders[-1].id if has_more and orders else None
 
-        return [
+        return OrderPage(
+            items=orders,
+            next_cursor=next_cursor,
+            has_more=has_more,
+        )
+
+    except psycopg.Error as error:
+        logger.warning(
+            "Using in-memory order pagination for user %s: %s",
+            user_id,
+            error,
+        )
+
+        filtered_orders = [
+            order for order in memory_data.orders
+            if order["user_id"] == user_id
+            and order["id"] > cursor_id
+        ]
+
+        has_more = len(filtered_orders) > first
+
+        selected_orders = filtered_orders[:first]
+
+        orders = [
             Order(
                 id=order["id"],
                 amount=order["amount"],
             )
-            for order in memory_data.orders
-            if order["user_id"] == user_id
+            for order in selected_orders
         ]
 
+        next_cursor = orders[-1].id if has_more and orders else None
 
-# Optimized implementation: one query for multiple users.
-def get_orders_by_user_ids(
-    user_ids: list[int],
-) -> dict[int, list[Order]]:
-
-    if not user_ids:
-        return {}
-
-    orders_by_user = {
-        user_id: [] for user_id in user_ids
-    }
-
-    try:
-        placeholders = ", ".join(["%s"] * len(user_ids))
-
-        sql = f"""
-            SELECT id, user_id, amount
-            FROM orders
-            WHERE user_id IN ({placeholders})
-            ORDER BY id
-        """
-
-        rows = execute_query(sql, tuple(user_ids))
-
-        for row in rows:
-            order = Order(
-                id=row[0],
-                amount=float(row[2]),
-            )
-
-            orders_by_user[row[1]].append(order)
-
-        return orders_by_user
-
-    except psycopg.Error as error:
-        logger.warning("Using memory fallback: %s", error)
-
-        for order in memory_data.orders:
-            user_id = order["user_id"]
-
-            if user_id in orders_by_user:
-                orders_by_user[user_id].append(
-                    Order(
-                        id=order["id"],
-                        amount=order["amount"],
-                    )
-                )
-
-        return orders_by_user
+        return OrderPage(
+            items=orders,
+            next_cursor=next_cursor,
+            has_more=has_more,
+        )
