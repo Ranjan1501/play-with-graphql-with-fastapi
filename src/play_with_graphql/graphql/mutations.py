@@ -1,27 +1,36 @@
-# Import Strawberry.
+
 import strawberry
 
-# Import our Book type.
 from play_with_graphql.models.book import Book
-
-# Import the service function responsible for creating books.
 from play_with_graphql.services.book_service import create_book
 
 
-# Mutation is another special GraphQL root type.
-# It defines operations that modify data.
+# @strawberry.input tells Strawberry that this class
+# represents an input object that GraphQL clients can send.
+#
+# Unlike @strawberry.type, this is specifically designed
+# for incoming data.
+@strawberry.input
+class BookInput:
+
+    # These fields represent the information
+    # required to create a new book.
+    title: str
+    author: str
+
+
 @strawberry.type
 class Mutation:
 
-    # @strawberry.mutation exposes this method
-    # as a GraphQL mutation operation.
     @strawberry.mutation
-    def add_book(self, title: str, author: str) -> Book:
+    def add_book(self, book_data: BookInput) -> Book:
 
-        # Call the service layer to create the book.
+        # book_data is an object containing title and author.
         #
-        # The service handles object creation and storing the book.
+        # We access its properties using dot notation.
+        # This is similar to accessing properties of an
+        # object in JavaScript.
         return create_book(
-            title=title,
-            author=author
+            title=book_data.title,
+            author=book_data.author
         )
