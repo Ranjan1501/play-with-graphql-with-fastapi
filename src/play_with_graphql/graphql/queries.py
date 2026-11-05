@@ -3,12 +3,16 @@ import strawberry
 
 # Import our Book type.
 from play_with_graphql.models.book import Book
+from play_with_graphql.models.user import User
 
 # Import functions from our service layer.
 from play_with_graphql.services.book_service import (
     get_all_books,
     get_book_by_id
 )
+
+from play_with_graphql.services.user_service import get_user_by_id
+
 
 
 # @strawberry.type tells Strawberry that this is a GraphQL type.
@@ -42,3 +46,9 @@ class Query:
 
         # Pass the requested ID to the service layer.
         return get_book_by_id(book_id)
+
+
+     # New resolver for fetching a user and their orders.
+    @strawberry.field
+    def user(self, user_id: int) -> User | None:
+        return get_user_by_id(user_id)
